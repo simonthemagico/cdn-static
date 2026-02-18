@@ -1,0 +1,97 @@
+name: Build & Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout bwa-extension source
+        uses: actions/checkout@v4
+        with:
+          repository: jrivals/bwa-extension
+          token: ${{ secrets.BWA_REPO_TOKEN }}
+          path: bwa-extension
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: cd bwa-extension && npm install
+
+      - name: Build extension
+        run: cd bwa-extension && npm run build
+
+      - name: Install Google Chrome
+        run: |
+          brew install --cask google-chrome
+
+      - name: Prepare private key
+        run: |
+          echo "${{ secrets.EXTENSION_PRIVATE_KEY }}" > /tmp/extension_private.pem
+
+      - name: Pack .crx
+        run: |
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+            --pack-extension="${GITHUB_WORKSPACE}/bwa-extension/extension_bwa" \
+            --pack-extension-key=/tmp/extension_private.pem \
+            --no-message-box \
+            2>/dev/null || true
+
+          if [ ! -f "${GITHUB_WORKSPACE}/bwa-extension/extension_bwa.crx" ]; then
+            echo "ERROR: .crx was not created"
+            exit 1
+          fi
+
+          # Renommer pour que l'URL GitHub Release soit propre
+          cp "${GITHUB_WORKSPACE}/bwa-extension/extension_bwa.crx" "${GITHUB_WORKSPACE}/extension.crx"
+          echo "CRX created successfully"
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Generate updates.xml
+        run: |
+          cat > "${GITHUB_WORKSPACE}/updates.xml" << 'XMLEOF'
+          <?xml version='1.0' encoding='UTF-8'?>
+          <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
+            <app appid='ibjiiajkgjpnoacicaogkokheilncali'>
+              <updatecheck codebase='https://github.com/simonthemagico/cdn-static/releases/latest/download/extension.crx' version='VERSION_PLACEHOLDER' />
+            </app>
+          </gupdate>
+          XMLEOF
+          sed -i '' "s/VERSION_PLACEHOLDER/${{ steps.version.outputs.version }}/" "${GITHUB_WORKSPACE}/updates.xml"
+
+      - name: Cleanup private key
+        if: always()
+        run: rm -f /tmp/extension_private.pem
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.version }}"
+          body: |
+            Extension BWA v${{ steps.version.outputs.version }}
+
+            **Fichiers :**
+            - `extension.crx` — Extension Chrome signée
+            - `updates.xml` — Manifeste de mise à jour Chrome
+          files: |
+            extension.crx
+            updates.xml
+          make_latest: true
