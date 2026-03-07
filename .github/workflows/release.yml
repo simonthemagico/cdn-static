@@ -51,23 +51,23 @@ jobs:
       - name: Pack .crx
         run: |
           "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-            --pack-extension="${GITHUB_WORKSPACE}/bwa-extension/extension_bwa" \
+            --pack-extension="${GITHUB_WORKSPACE}/bwa-extension/extension" \
             --pack-extension-key=/tmp/extension_private.pem \
             --no-message-box \
             2>/dev/null || true
 
-          if [ ! -f "${GITHUB_WORKSPACE}/bwa-extension/extension_bwa.crx" ]; then
+          if [ ! -f "${GITHUB_WORKSPACE}/bwa-extension/extension.crx" ]; then
             echo "ERROR: .crx was not created"
             exit 1
           fi
 
-          cp "${GITHUB_WORKSPACE}/bwa-extension/extension_bwa.crx" "${GITHUB_WORKSPACE}/extension.crx"
+          cp "${GITHUB_WORKSPACE}/bwa-extension/extension.crx" "${GITHUB_WORKSPACE}/extension.crx"
           echo "CRX created successfully"
 
       - name: Extract version
         id: version
         run: |
-          VERSION=$(python3 -c "import json; print(json.load(open('bwa-extension/extension_bwa/manifest.json'))['version'])")
+          VERSION=$(python3 -c "import json; print(json.load(open('bwa-extension/extension/manifest.json'))['version'])")
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Version: ${VERSION}"
 
